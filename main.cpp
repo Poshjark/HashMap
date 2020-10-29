@@ -8,7 +8,5 @@ using namespace std;
 
 int main(){
 
-    std::string s = "asdasda123fgsdhgdfhsgfhsdfhsdhsdfsdfhd";
-    auto h = hash<string>{}(s);
-    cout << h << endl;
+    int s;
 }
