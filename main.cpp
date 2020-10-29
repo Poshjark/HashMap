@@ -8,5 +8,5 @@ using namespace std;
 
 int main(){
 
-    int s;
+    int s =0;
 }
