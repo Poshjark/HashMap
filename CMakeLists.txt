@@ -7,8 +7,8 @@ set(EXECUTABLE_OUTPUT_PATH "${CMAKE_BINARY_DIR}")
 
 set(CMAKE_CXX_STANDARD 17)
 
-add_library(HashMapLib SHARED hashtable.cpp)
+#add_library(HashMapLib SHARED hashtable.cpp)
 
-target_link_libraries(HashMapLib)
+#target_link_libraries(HashMapLib)
 
 add_executable(${PROJECT_NAME} main.cpp )
