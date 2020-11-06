@@ -11,5 +11,8 @@ int main() {
     auto c = myhash["q"];
     myhash["q"] = "asd";
     cout << myhash["q"] << endl;
+    auto sec = HashTable<int,char>();
+    sec.add(12,'c');
+    cout << sec[12] << endl;
     return 0;
 }
