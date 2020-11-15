@@ -1,18 +1,22 @@
 #include "hashtable.h"
 #include <iostream>
+#include <unordered_map>
 
 
 int main() {
     HashTable<string, string> myhash = HashTable<string, string>();
-    myhash.add("ad"s, "ad"s);
-    auto b = myhash["ad"s];
-    cout << b << endl;
-    myhash.delete_("ad"s);
-    auto c = myhash["q"];
-    myhash["q"] = "asd";
-    cout << myhash["q"] << endl;
-    auto sec = HashTable<int,char>();
-    sec.add(12,'c');
+    auto sec = HashTable<int,int>();
+    sec.add(12,45);
     cout << sec[12] << endl;
+    cout << sec[1] << endl;
+    auto elem = sec[0];
+    cout << elem << endl;
+    for (auto i=0; i < 1000; i++){
+        sec[i] = (i-10)*i;
+        if (i >990){
+            cout << i << endl;
+        }
+    }
+
     return 0;
 }
