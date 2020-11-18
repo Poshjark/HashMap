@@ -5,9 +5,21 @@
 #include <type_traits>
 #include <iostream>
 #include <iomanip>
+#include <concepts>
 
-#define DEBUG true
 
+#define DEBUG false
+template<typename Container>
+constexpr size_t lenght_of(Container cont){
+    size_t length = 0;
+    if(cont.begin()==cont.end()){
+        return 0;
+    }
+    for (auto elem:cont){
+        length++;
+    }
+    return length;
+}
 
 
 /**
@@ -32,27 +44,14 @@ template <typename Key,
         size_t first_pos = 0;
         size_t last_pos = 0;
 
-         container_type buckets;
+        container_type buckets;
 
-        constexpr size_t length_of_forward_list(size_t hash){
-            size_t num = 0;
-            for(auto elem:*buckets[hash]){
-                num++;
-            }
-            return num;
-        }
 
-        void resize(){
-            this->current_size*=2;
-            for(size_t i = buckets.size();i<current_size;i++){
-                std::forward_list<std::pair<const_key_type, mapped_type>>* p = new std::forward_list<std::pair<const_key_type,Value>>;
-                buckets.push_back(p);
-            }
-        };
+        void resize();
 
         void rehash();
 
-        constexpr size_t hash_function(const_key_type key){
+        constexpr size_t hash_function(key_type key){
 
             return std::hash<int>::_Do_hash(key)%current_size;
         }
@@ -60,7 +59,12 @@ template <typename Key,
 
 
         constexpr bool key_exists(size_t hash) {
-            return !buckets[hash]->empty();
+            if (buckets[hash]!=nullptr){
+              return !buckets[hash]->empty();
+            }
+            else{
+                return false;
+            }
         }
 
 
@@ -86,8 +90,7 @@ template <typename Key,
             first_pos = 0;
             last_pos = 0;
             for (size_t i = 0; i <= default_size; i++) {
-                std::forward_list<std::pair<const_key_type, Value>>* p = new std::forward_list<std::pair<const_key_type,Value>>;
-                buckets.push_back(p);
+                buckets.push_back(nullptr);
             }
 
         }
@@ -165,13 +168,16 @@ template <typename Key,
             using base_container_type = const HashTable<key_type,mapped_type>;
             using base_container_type_ptr = HashTable<key_type,mapped_type>*;
             using const_base_container_type_ref = const HashTable<key_type,mapped_type>&;
+            using Key_Val = std::pair<const_key_type, mapped_type>;
             using KeyVal_ptr = std::pair<const_key_type, mapped_type>*;
+            using List_type =std::forward_list<std::pair<const_key_type,mapped_type>>;
         public:
             const_base_container_type_ref parent;
             KeyVal_ptr ptr;
             size_t pos;
             size_t pos_in_bucket;
-            iterator(base_container_type_ptr _parent=nullptr,size_t _pos=0):parent(*_parent),pos(_pos),ptr(nullptr){
+            iterator() = delete;
+            iterator(base_container_type_ptr _parent=nullptr, size_t _pos=0):parent(*_parent),pos(_pos),ptr(nullptr){
                 pos = parent.first_pos;
                 if (parent.buckets[pos]->empty()){
                     ptr = nullptr;
@@ -199,7 +205,7 @@ template <typename Key,
                 return *this;
             };
 
-            constexpr bool operator<(iterator&& second){
+            constexpr bool operator<(iterator second){
                 if (constexpr bool a = this->parent == second.parent){
                     return this->pos < second.pos && this->parent.buckets[this->pos];
                 }
@@ -212,37 +218,48 @@ template <typename Key,
                 ptr = &*parent.buckets[parent.first_pos]->begin();
             };
             void end(){
-                ptr = &*parent.buckets[parent.first_pos]->end();
+                ptr = &*parent.buckets[parent.last_pos]->end();
             };
             void constexpr next(){
-                size_t counter = pos;
-                while(counter <= parent.last_pos){
-                    if(!parent.buckets[counter]->empty()){
-                        auto current_bucket = parent.buckets[counter];
-                        auto forward_iterator = current_bucket->begin();
-                        size_t length = 0;
-                        for (auto elem:*current_bucket){
-                            length++;
-                        }
+                size_t flag = 1;
+                for (size_t i = pos; i <= parent.last_pos;i++){
+                    if (lenght_of<List_type>(*parent.buckets[pos]) > flag){
 
-                        if(length > 1 && ptr != &*current_bucket->end() ){
-                            while(&*forward_iterator!=ptr){
-                                forward_iterator++;
-                            }
-                            ptr = &*forward_iterator;
+                        auto end = parent.buckets[i]->end();
+                        auto it = parent.buckets[i]->begin();
+                        if(flag == 0){
+                            pos = i;
+                            ptr = &*it;
                             return;
                         }
+                        while(it!=end){
+                            it++;
+                            if(&*ptr == &*it){
+                                it++;
+                                auto test = it._Ptr;
+                                if (it._Ptr != NULL){
+                                    pos = i;
+                                    ptr = &*it;
+                                    return;
+                                }
+                            }
 
-                        this->ptr = &(parent.buckets[counter]->front());
-                        pos = counter;
-                        return;
+                        }
                     }
-                    counter++;
+                    else{
+                        flag = 0;
+                        continue;
+                    }
                 }
             }
 
             void constexpr prev();
             };
+
+
+
+
+
 
 
         iterator begin(){
