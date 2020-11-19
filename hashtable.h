@@ -8,6 +8,11 @@
 
 #define DEBUG true
 
+void debug_text(std::string_view str){
+    if(DEBUG){
+        std::cout << str <<"\n";
+    }
+}
 
 
 /**
@@ -26,15 +31,14 @@ template <typename Key,
         using key_type = Key;
         using const_key_type = const Key;
         static constexpr size_t default_size = 8;
-        static constexpr size_t current_size = default_size;
+        size_t current_size = default_size;
         size_t number_of_elements = 0;
         static constexpr double overload_factor = 0.75;
         double load_factor = 0;
         size_t first_pos = 0;
         size_t last_pos = 0;
 
-         container_type buckets;
-
+        container_type buckets;
 
         constexpr size_t length_of_forward_list(bucket_type list){
             size_t num = 0;
@@ -48,11 +52,9 @@ template <typename Key,
 
         void rehash();
 
-        constexpr size_t hash_function(const_key_type key){
+        constexpr size_t hash_function(key_type key){
             return std::hash<key_type>::_Do_hash(key)%current_size;
         }
-
-
 
         constexpr bool key_exists(size_t hash) {
             return !(buckets[hash] == nullptr);
@@ -75,11 +77,7 @@ template <typename Key,
 
     public:
 
-
-
-        HashTable() {
-            first_pos = 0;
-            last_pos = 0;
+        HashTable():first_pos(0),last_pos(0) {
             for (size_t i = 0; i <= default_size; i++) {
                 std::forward_list<std::pair<const_key_type, Value>>* p = nullptr;
                 buckets.push_back(p);
@@ -105,6 +103,7 @@ template <typename Key,
             size_t hash = hash_function(key);
             if(DEBUG){
                 std::cout << std::setw(10);
+                std::cout << "Adding a key...\n";
                 std::cout << "key = " << key << "\tvalue = " << value << "\thash = " << hash << "\n";
             }
             std::pair<const_key_type, mapped_type> pair_to_insert = std::make_pair(key, value);
@@ -113,7 +112,6 @@ template <typename Key,
                 buckets[hash]->insert_after(buckets[hash]->before_begin(),pair_to_insert);
             }
             else {
-
                 buckets[hash]->insert_after(buckets[hash]->before_begin(), pair_to_insert);
             }
             last_first(hash);
@@ -123,7 +121,7 @@ template <typename Key,
         }
 
         std::pair<const_key_type, mapped_type>* find(key_type key) {
-            const size_t index = hash_function(key);
+            size_t index = hash_function(key);
             if (key_exists(index)) {
                 auto it = buckets[index]->begin();
                 do{
@@ -136,11 +134,11 @@ template <typename Key,
             return nullptr;
         }
 
-        void delete_(const_key_type key) {
-            const size_t hash = hash_function(key);
+        void delete_(key_type key) {
+            constexpr size_t hash = hash_function(key);
             if (key_exists(hash)) {
                 if (length_of_forward_list(hash) > 1) {
-                    std::forward_list<std::pair<const_key_type, mapped_type>>* current_list = buckets[hash];
+                    bucket_type_ptr current_list = buckets[hash];
                     auto before = current_list->before_begin();
                     auto now = current_list->begin();
                     if (now->first == key) {
@@ -181,14 +179,12 @@ template <typename Key,
             KeyVal_ptr ptr;
             size_t pos;
             size_t pos_in_bucket;
-            iterator(base_container_type_ptr _parent=nullptr,size_t _pos=0):parent(*_parent),pos(_pos),ptr(nullptr){
-                pos = parent.first_pos;
-                if (parent.buckets[pos]->empty()){
-                    ptr = nullptr;
+            iterator(base_container_type_ptr _parent):parent(*_parent),pos(parent.first_pos){
+                if(DEBUG){
+                    std::cout << "HashMap iterator created in bucket #" << pos << "\n";
                 }
-                else{
-                    ptr = &(*parent.buckets[pos]->begin());
-                }
+                auto it = parent.buckets[pos]->begin();
+                ptr = &*it;
                 pos_in_bucket = 0;
             }
             auto constexpr operator*(){
@@ -237,6 +233,7 @@ template <typename Key,
                             if ((*it == *ptr) && (it._Ptr->_Next != nullptr)){
                                 pos = i;
                                 ptr = &(it._Ptr->_Next->_Myval);
+                                debug_text("Iterated in the same bucket(collision) #"+std::to_string(pos));
                                 return;
                             }
                             it++;
@@ -247,6 +244,7 @@ template <typename Key,
                         auto it = parent.buckets[i]->begin();
                         ptr = &*it;
                         pos = i;
+                        debug_text("Iterated to bucket #"+std::to_string(pos));
                         return;
                     }
                 }
