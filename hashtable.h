@@ -2,11 +2,9 @@
 #include <utility>
 #include <forward_list>
 #include <string>
-#include <type_traits>
 #include <iostream>
-#include <iomanip>
 
-#define DEBUG true
+#define DEBUG false
 
 void debug_text(std::string_view str){
     if(DEBUG){
@@ -14,6 +12,7 @@ void debug_text(std::string_view str){
     }
 }
 
+struct CanNotAccessNullptr{};
 
 /**
  * @class HashTable
@@ -85,6 +84,9 @@ template <typename Key,
             if (DEBUG){
                 std::cout << "HashMap is created. Size of table is " << current_size << "\n";
             }
+
+        }
+        HashTable(std::initializer_list<std::pair<key_type,mapped_type>> args){
 
         }
 
@@ -174,30 +176,54 @@ template <typename Key,
             using base_container_type_ptr = HashTable<key_type,mapped_type>*;
             using const_base_container_type_ref = const HashTable<key_type,mapped_type>&;
             using KeyVal_ptr = std::pair<const_key_type, mapped_type>*;
+
+
+
         public:
             const_base_container_type_ref parent;
             KeyVal_ptr ptr;
             size_t pos;
-            size_t pos_in_bucket;
-            iterator(base_container_type_ptr _parent):parent(*_parent),pos(parent.first_pos){
+            iterator(base_container_type_ptr _parent, bool points_to_the_end = false):parent(*_parent),pos(parent.first_pos){
                 if(DEBUG){
                     std::cout << "HashMap iterator created in bucket #" << pos << "\n";
                 }
-                auto it = parent.buckets[pos]->begin();
-                ptr = &*it;
-                pos_in_bucket = 0;
+                if(!points_to_the_end){
+                    auto it = parent.buckets[pos]->begin();
+                    ptr = &*it;
+                }
+                else{
+                    auto it = parent.buckets[pos]->end();
+                    ptr = &*it;
+                }
+
+
+
+            }
+
+            iterator(iterator& it, bool points_to_the_end = false)
+                :
+                  parent(it.parent),
+                  pos(points_to_the_end
+                      ? parent.last_pos
+                      : it.pos),
+                  ptr(it.ptr){
+            }
+
+            ~iterator(){
+                debug_text("Iterator destructed\n");
             }
             auto constexpr operator*(){
                 return *ptr;
             }
             auto constexpr operator++(){
                 this->next();
-                return *this;
+                return this;
             };
 
-            auto constexpr operator++(int){
+            iterator  operator++(int){
+                iterator temp = iterator(*this);
                 this->next();
-                return this->operator*();
+                return temp;
             };
 
             auto constexpr operator--(){
@@ -205,22 +231,28 @@ template <typename Key,
                 return *this;
             };
 
-            constexpr bool operator<(iterator&& second){
-                if (constexpr bool a = this->parent == second.parent){
-                    return this->pos < second.pos && this->parent.buckets[this->pos];
-                }
+
+            constexpr bool operator==(iterator second){
+                return ptr == second.ptr;
             }
 
-            constexpr bool operator==(iterator&& second){
-                return this->ptr == second->ptr;
+
+            auto constexpr operator->(){
+                return this;
             }
+
             void first(){
                 ptr = &*parent.buckets[parent.first_pos]->begin();
             };
+
             void end(){
-                ptr = &*parent.buckets[parent.first_pos]->end();
+                ptr = &(*(parent.buckets[parent.last_pos])->end());
             };
+
             void constexpr next(){
+                if(ptr==nullptr){
+                    return;
+                }
                 for (std::size_t i =  pos; i <= parent.last_pos; i++){
                     if(parent.buckets[i] == nullptr){
                         continue;
@@ -233,7 +265,7 @@ template <typename Key,
                             if ((*it == *ptr) && (it._Ptr->_Next != nullptr)){
                                 pos = i;
                                 ptr = &(it._Ptr->_Next->_Myval);
-                                debug_text("Iterated in the same bucket(collision) #"+std::to_string(pos));
+                                debug_text("Iterated in the same #"+std::to_string(pos) + " bucket(collision happened)");
                                 return;
                             }
                             it++;
@@ -249,7 +281,7 @@ template <typename Key,
                     }
                 }
                 pos++;
-                ptr = nullptr;
+                this->end();
             }
 
             void constexpr prev();
@@ -257,16 +289,16 @@ template <typename Key,
 
 
         iterator begin(){
-            std::size_t a = 0 + this->first_pos;
-            auto new_iter = iterator(this);
-            return new_iter;
+            return iterator(this);
         }
         iterator end(){
-            std::size_t a = 0 + this->last_pos;
-            auto new_iterator = iterator();
-            return iterator(a);
+            return iterator(this,true);
         }
 
+
+        const size_t number(){
+            return  size_t(number_of_elements);
+        }
 
         const bucket_type& const_buckets(){
             return &buckets;
