@@ -1,18 +1,14 @@
+#pragma once
+
 #include <vector>
 #include <utility>
 #include <forward_list>
 #include <string>
+#include <string_view>
 #include <iostream>
 
 #define DEBUG false
 
-void debug_text(std::string_view str){
-    if(DEBUG){
-        std::cout << str <<"\n";
-    }
-}
-
-struct CanNotAccessNullptr{};
 
 /**
  * @class HashTable
@@ -23,23 +19,23 @@ template <typename Key,
     class HashTable final {
 
         friend class iterator;
-        using container_type = std::vector< std::forward_list< std::pair<const Key, Value> >* >;
+        using container_type = std::vector< std::forward_list< std::pair<const Key, Value> > >;
         using bucket_type = std::forward_list<std::pair<const Key, Value>>;
-        using bucket_type_ptr = std::forward_list< std::pair<const Key, Value> >* ;
         using mapped_type = Value;
         using key_type = Key;
         using const_key_type = const Key;
-        static constexpr size_t default_size = 8;
+        static constexpr size_t default_size = 100;
         size_t current_size = default_size;
         size_t number_of_elements = 0;
         static constexpr double overload_factor = 0.75;
         double load_factor = 0;
         size_t first_pos = 0;
         size_t last_pos = 0;
+        size_t buckets_initiliazed  = 0;
 
         container_type buckets;
 
-        constexpr size_t length_of_forward_list(bucket_type list){
+        constexpr size_t length_of_forward_list(const bucket_type& list){
             size_t num = 0;
             for(auto elem:list){
                 num++;
@@ -52,15 +48,31 @@ template <typename Key,
         void rehash();
 
         constexpr size_t hash_function(key_type key){
-            return std::hash<key_type>::_Do_hash(key)%current_size;
+            return std::hash<key_type>()(key)%current_size;
         }
 
-        constexpr bool key_exists(size_t hash) {
-            return !(buckets[hash] == nullptr);
+        bool hash_exists(size_t hash) {
+            auto size = buckets.size();
+            if(size==0){
+                return false;
+            }
+            if(size - 1 >= hash){
+                return !(buckets[hash].empty());
+            }
+            return false;
         }
 
 
-        void last_first(size_t index){
+        constexpr size_t find_pre_last_bucket(){
+            for(size_t index = last_pos;index>=0;index--){
+                if(!buckets[index].empty()){
+                    return index;
+                }
+            }
+            return 0;
+        }
+
+        void last_first(size_t index, bool deleting = false){
             if (this->number_of_elements==0){
                 this->first_pos = index;
                 this->last_pos = index;
@@ -72,156 +84,82 @@ template <typename Key,
             else if(index>last_pos){
                 this->last_pos = index;
             }
+
+            if(deleting && (index==last_pos)){
+                last_pos = find_pre_last_bucket();
+            }
+
         }
+
 
     public:
 
-        HashTable():first_pos(0),last_pos(0) {
-            for (size_t i = 0; i <= default_size; i++) {
-                std::forward_list<std::pair<const_key_type, Value>>* p = nullptr;
-                buckets.push_back(p);
-            }
-            if (DEBUG){
-                std::cout << "HashMap is created. Size of table is " << current_size << "\n";
-            }
-
-        }
-        HashTable(std::initializer_list<std::pair<key_type,mapped_type>> args){
-
-        }
-
-        ~HashTable(){
-            for(auto elem:buckets){
-                if(elem == nullptr){
-                    delete elem;
-                }
-            }
-            if (DEBUG){
-                std::cout << "HashMap is destructed\n";
-            }
-        }
-
-        void add(key_type key, mapped_type value) {
-            size_t hash = hash_function(key);
-            if(DEBUG){
-                std::cout << std::setw(10);
-                std::cout << "Adding a key...\n";
-                std::cout << "key = " << key << "\tvalue = " << value << "\thash = " << hash << "\n";
-            }
-            std::pair<const_key_type, mapped_type> pair_to_insert = std::make_pair(key, value);
-            if (!key_exists(hash)) {
-                buckets[hash] = new bucket_type;
-                buckets[hash]->insert_after(buckets[hash]->before_begin(),pair_to_insert);
-            }
-            else {
-                buckets[hash]->insert_after(buckets[hash]->before_begin(), pair_to_insert);
-            }
-            last_first(hash);
-            number_of_elements++;
-
-            this->load_factor = double(this->number_of_elements) / double(this->current_size);
-        }
-
-        std::pair<const_key_type, mapped_type>* find(key_type key) {
-            size_t index = hash_function(key);
-            if (key_exists(index)) {
-                auto it = buckets[index]->begin();
-                do{
-                    if (it->first == key){
-                        return &(*it);
-                    }
-                    it++;
-                }while(it != buckets[index]->end());
-            }
-            return nullptr;
-        }
-
-        void delete_(key_type key) {
-            constexpr size_t hash = hash_function(key);
-            if (key_exists(hash)) {
-                if (length_of_forward_list(hash) > 1) {
-                    bucket_type_ptr current_list = buckets[hash];
-                    auto before = current_list->before_begin();
-                    auto now = current_list->begin();
-                    if (now->first == key) {
-                        current_list->erase_after(before);
-                        number_of_elements--;
-                        this->load_factor = double(this->number_of_elements) / double(this->current_size);
-
-                    }
-                }
-
-                else {
-                    delete buckets[hash];
-                    number_of_elements--;
-                    this->load_factor = double(this->number_of_elements) / double(this->current_size);
-
-                }
-            }
-        }
-
-        Value&  operator[](key_type key){
-            std::pair<const_key_type,Value> *pair = find(key);
-            if (pair == nullptr){
-                this->add(key,Value());
-                pair = find(key);
-            }
-            return pair->second;
-        }
-
-
-
         class iterator {
-            using base_container_type = const HashTable<key_type,mapped_type>;
-            using base_container_type_ptr = HashTable<key_type,mapped_type>*;
-            using const_base_container_type_ref = const HashTable<key_type,mapped_type>&;
+            using base_container_type =  HashTable<key_type,mapped_type>;
+            using base_container_type_ptr =  HashTable<key_type,mapped_type>*;
+            using base_container_type_ref = HashTable<key_type,mapped_type>&;
             using KeyVal_ptr = std::pair<const_key_type, mapped_type>*;
+            using key_val_pair = std::pair<const_key_type,mapped_type>;
 
 
 
         public:
-            const_base_container_type_ref parent;
+            base_container_type_ref parent;
             KeyVal_ptr ptr;
             size_t pos;
-            iterator(base_container_type_ptr _parent, bool points_to_the_end = false):parent(*_parent),pos(parent.first_pos){
-                if(DEBUG){
-                    std::cout << "HashMap iterator created in bucket #" << pos << "\n";
-                }
+            size_t pos_in_bucket;
+            iterator(base_container_type_ptr _parent, bool points_to_the_end = false)
+                :
+                  parent(*_parent),
+                  pos(points_to_the_end
+                      ? parent.first_pos
+                      : parent.last_pos){
                 if(!points_to_the_end){
-                    auto it = parent.buckets[pos]->begin();
-                    ptr = &*it;
+                    auto it = parent.buckets[pos].begin();
+                    ptr = &(*it);
                 }
                 else{
-                    auto it = parent.buckets[pos]->end();
+
+                    auto it = parent.buckets[pos].end();
                     ptr = &*it;
+#ifdef DEBUG
+                    std::cout << "Iterator to the END created\n";
+#endif
                 }
-
-
-
             }
 
-            iterator(iterator& it, bool points_to_the_end = false)
-                :
+            iterator(base_container_type_ptr _parent,KeyVal_ptr _ptr, size_t hash, size_t _pos_in_bucket):
+                  parent(*_parent),
+                  pos(hash),
+                  pos_in_bucket(_pos_in_bucket),
+                  ptr(_ptr){}
+
+            iterator(iterator& it, bool points_to_the_end = false):
                   parent(it.parent),
                   pos(points_to_the_end
                       ? parent.last_pos
                       : it.pos),
-                  ptr(it.ptr){
+                  ptr(it.ptr){}
+
+
+            iterator& operator=(iterator& right){
+                this->ptr = right.ptr;
+                this->pos = right.pos;
+                this->pos_in_bucket = right.pos_in_bucket;
+                return *this;
             }
 
-            ~iterator(){
-                debug_text("Iterator destructed\n");
-            }
-            auto constexpr operator*(){
+            std::pair<const_key_type,mapped_type>& operator*(){
                 return *ptr;
             }
+
             auto constexpr operator++(){
                 this->next();
                 return this;
             };
 
             iterator  operator++(int){
-                iterator temp = iterator(*this);
+                iterator temp = iterator(std::move(*this));
                 this->next();
                 return temp;
             };
@@ -230,6 +168,8 @@ template <typename Key,
                 this->prev();
                 return *this;
             };
+
+
 
 
             constexpr bool operator==(iterator second){
@@ -241,51 +181,107 @@ template <typename Key,
                 return this;
             }
 
-            void first(){
-                ptr = &*parent.buckets[parent.first_pos]->begin();
-            };
 
-            void end(){
-                ptr = &(*(parent.buckets[parent.last_pos])->end());
-            };
 
             void constexpr next(){
-                if(ptr==nullptr){
-                    return;
-                }
-                for (std::size_t i =  pos; i <= parent.last_pos; i++){
-                    if(parent.buckets[i] == nullptr){
-                        continue;
-                    }
-
-                    if (i==pos){
-                        auto it = parent.buckets[i]->begin();
-                        auto end = parent.buckets[i]->end();
-                        while (it!=end){
-                            if ((*it == *ptr) && (it._Ptr->_Next != nullptr)){
-                                pos = i;
-                                ptr = &(it._Ptr->_Next->_Myval);
-                                debug_text("Iterated in the same #"+std::to_string(pos) + " bucket(collision happened)");
-                                return;
+                for(size_t i = pos;i<=parent.last_pos;i++){
+                    if(!parent.buckets[i].empty()){
+                        auto it = parent.buckets[i].begin();
+                        auto end = parent.buckets[i].end();
+                        while(it!=end){
+                            if(*it == *ptr){
+                                it++;
+                                if(it!=parent.buckets[i].end()){
+                                    pos = i;
+                                    ptr = &*it;
+                                    return;
+                                }
+                                else{
+                                    break;
+                                }
                             }
                             it++;
                         }
                     }
-
-                    else{
-                        auto it = parent.buckets[i]->begin();
-                        ptr = &*it;
-                        pos = i;
-                        debug_text("Iterated to bucket #"+std::to_string(pos));
-                        return;
-                    }
                 }
-                pos++;
-                this->end();
+            pos = parent.last_pos;
+            ptr = nullptr;
             }
+
 
             void constexpr prev();
             };
+
+
+        HashTable():first_pos(0),last_pos(0) {
+            buckets.push_back(std::forward_list<std::pair<const_key_type,mapped_type>>());
+
+#ifndef NDEBUG
+
+#endif
+        }
+
+
+
+        void add(key_type key, mapped_type value) {
+            size_t hash = hash_function(key);
+            for (size_t _ = buckets.size();_<= hash;_++){
+                buckets.push_back(std::forward_list<std::pair<const key_type, mapped_type>>());
+            }
+            buckets[hash].insert_after(buckets[hash].before_begin(),std::pair<const_key_type,mapped_type>(key,value));
+            last_first(hash);
+            number_of_elements++;
+
+            this->load_factor = double(this->number_of_elements) / double(this->current_size);
+        }
+
+
+
+        bool delete_(key_type key){
+            size_t index = hash_function(key);
+            if(hash_exists(index)){
+                auto before_it = buckets[index].before_begin();
+                auto it = buckets[index].begin();
+                while(it!=buckets[index].end()){
+                    if((*it).first == key){
+                        buckets[index].erase_after(before_it);
+                        number_of_elements--;
+                        if(buckets[index].empty()){
+                            last_first(index,true);
+                        }
+                        break;
+                    }
+                    before_it++;
+                    it++;
+                }
+            }
+            return false;
+        }
+
+        mapped_type&  operator[](key_type key){
+            iterator it = find(key);
+            if(it == this->end()){
+                this->add(key,mapped_type());
+                it = iterator(this->find(key));
+            }
+            mapped_type& lref = (*it).second;
+            return lref;
+        }
+
+
+        iterator find(key_type key) {
+           size_t index = hash_function(key);
+           if (hash_exists(index)){
+               auto it = buckets[index].begin();
+               while(it!=buckets[index].end())
+                   if((*it).first == key){
+                       return iterator(this,&(*it),index,0);
+                   }
+               it++;
+           }
+           return this->end();
+       }
+
 
 
         iterator begin(){
@@ -300,8 +296,8 @@ template <typename Key,
             return  size_t(number_of_elements);
         }
 
-        const bucket_type& const_buckets(){
-            return &buckets;
+        const container_type const_buckets(){
+            return buckets;
         }
 
     };
