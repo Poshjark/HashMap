@@ -4,10 +4,9 @@
 #include <utility>
 #include <forward_list>
 #include <string>
-#include <string_view>
 #include <iostream>
 
-#define DEBUG false
+#define NDEBUG
 
 
 /**
@@ -64,12 +63,21 @@ template <typename Key,
 
 
         constexpr size_t find_pre_last_bucket(){
-            for(size_t index = last_pos;index>=0;index--){
+            for(size_t index = last_pos;index>0;index--){
                 if(!buckets[index].empty()){
                     return index;
                 }
             }
             return 0;
+        }
+
+        constexpr size_t find_second_bucket(){
+            for(size_t index =first_pos+1;index <= last_pos;index++){
+                if(!buckets[index].empty()){
+                    return index;
+                }
+            }
+            return last_pos;
         }
 
         void last_first(size_t index, bool deleting = false){
@@ -87,6 +95,10 @@ template <typename Key,
 
             if(deleting && (index==last_pos)){
                 last_pos = find_pre_last_bucket();
+            }
+
+            else if(deleting && (index == first_pos)){
+                first_pos = find_second_bucket();
             }
 
         }
@@ -112,17 +124,20 @@ template <typename Key,
                 :
                   parent(*_parent),
                   pos(points_to_the_end
-                      ? parent.first_pos
-                      : parent.last_pos){
+                      ? parent.last_pos
+                      : parent.first_pos){
                 if(!points_to_the_end){
                     auto it = parent.buckets[pos].begin();
                     ptr = &(*it);
+#ifndef NDEBUG
+                    std::cout << "Iterator to BEGIN created\n";
+#endif
                 }
                 else{
 
                     auto it = parent.buckets[pos].end();
                     ptr = &*it;
-#ifdef DEBUG
+#ifndef NDEBUG
                     std::cout << "Iterator to the END created\n";
 #endif
                 }
@@ -159,7 +174,7 @@ template <typename Key,
             };
 
             iterator  operator++(int){
-                iterator temp = iterator(std::move(*this));
+                iterator temp = iterator(*this);
                 this->next();
                 return temp;
             };
@@ -177,6 +192,10 @@ template <typename Key,
             }
 
 
+            constexpr bool operator!=(iterator second){
+                return ptr != second.ptr;
+            }
+
             auto constexpr operator->(){
                 return this;
             }
@@ -185,27 +204,36 @@ template <typename Key,
 
             void constexpr next(){
                 for(size_t i = pos;i<=parent.last_pos;i++){
-                    if(!parent.buckets[i].empty()){
-                        auto it = parent.buckets[i].begin();
-                        auto end = parent.buckets[i].end();
-                        while(it!=end){
-                            if(*it == *ptr){
+                    if(i==pos){
+                        if(!parent.buckets[i].empty()){
+                            auto it = parent.buckets[i].begin();
+                            auto end = parent.buckets[i].end();
+                            while(it!=end){
+                                if(*it == *ptr){
+                                    it++;
+                                    if(it!=parent.buckets[i].end()){
+                                        pos = i;
+                                        ptr = &*it;
+                                        return;
+                                    }
+                                    else{
+                                        break;
+                                    }
+                                }
                                 it++;
-                                if(it!=parent.buckets[i].end()){
-                                    pos = i;
-                                    ptr = &*it;
-                                    return;
-                                }
-                                else{
-                                    break;
-                                }
                             }
-                            it++;
+                        }
+                    }
+                    else{
+                        if(!parent.buckets[i].empty()){
+                            pos = i;
+                            ptr = &*(parent.buckets[i].begin());
+                            return;
                         }
                     }
                 }
             pos = parent.last_pos;
-            ptr = nullptr;
+            ptr = &(*(parent.buckets[parent.last_pos].end()));
             }
 
 
@@ -215,9 +243,10 @@ template <typename Key,
 
         HashTable():first_pos(0),last_pos(0) {
             buckets.push_back(std::forward_list<std::pair<const_key_type,mapped_type>>());
+            // The first list must be initialized due to the functionals.
 
 #ifndef NDEBUG
-
+            std::cout << "Invoked default hashmap constructor\n";
 #endif
         }
 
@@ -249,18 +278,27 @@ template <typename Key,
                         if(buckets[index].empty()){
                             last_first(index,true);
                         }
-                        break;
+#ifndef NDEBUG
+                        std::cout << "\nPair with key=" << key << " was deleted\n";
+#endif
+                        return true;
                     }
                     before_it++;
                     it++;
                 }
             }
+#ifndef NDEBUG
+            std::cerr << "No such key in hashmap!\n";
+#endif
             return false;
         }
 
         mapped_type&  operator[](key_type key){
             iterator it = find(key);
             if(it == this->end()){
+#ifndef NDEBUG
+                std::cout << "No such key, invoking add()...\n";
+#endif
                 this->add(key,mapped_type());
                 it = iterator(this->find(key));
             }
@@ -273,14 +311,15 @@ template <typename Key,
            size_t index = hash_function(key);
            if (hash_exists(index)){
                auto it = buckets[index].begin();
-               while(it!=buckets[index].end())
+               while(it!=buckets[index].end()){
                    if((*it).first == key){
                        return iterator(this,&(*it),index,0);
                    }
                it++;
+               }
            }
            return this->end();
-       }
+        }
 
 
 
