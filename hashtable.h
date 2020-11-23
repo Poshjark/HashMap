@@ -157,7 +157,7 @@ template <typename Key,
                   ptr(it.ptr){}
 
 
-            iterator& operator=(iterator& right){
+            iterator& operator=(iterator&& right){
                 this->ptr = right.ptr;
                 this->pos = right.pos;
                 this->pos_in_bucket = right.pos_in_bucket;
@@ -187,7 +187,7 @@ template <typename Key,
 
 
 
-            constexpr bool operator==(iterator second){
+            constexpr bool operator==(iterator&& second){
                 return ptr == second.ptr;
             }
 
@@ -252,12 +252,14 @@ template <typename Key,
 
 
 
-        void add(key_type key, mapped_type value) {
+
+        template<typename T_k, typename T_v>
+        void insert(T_k&& key, T_v&& value) {
             size_t hash = hash_function(key);
             for (size_t _ = buckets.size();_<= hash;_++){
-                buckets.push_back(std::forward_list<std::pair<const key_type, mapped_type>>());
+                buckets.push_back(std::forward_list<std::pair<const T_k,T_v>>());
             }
-            buckets[hash].insert_after(buckets[hash].before_begin(),std::pair<const_key_type,mapped_type>(key,value));
+            buckets[hash].insert_after(buckets[hash].before_begin(),std::pair<const T_k,T_v>(key,value));
             last_first(hash);
             number_of_elements++;
 
@@ -265,8 +267,10 @@ template <typename Key,
         }
 
 
+        template <typename T_k, typename T_v>
+        void assign(T_k&& key, T_v&& value);
 
-        bool delete_(key_type key){
+        size_t remove(key_type&& key){
             size_t index = hash_function(key);
             if(hash_exists(index)){
                 auto before_it = buckets[index].before_begin();
@@ -281,7 +285,7 @@ template <typename Key,
 #ifndef NDEBUG
                         std::cout << "\nPair with key=" << key << " was deleted\n";
 #endif
-                        return true;
+                        return 1;
                     }
                     before_it++;
                     it++;
@@ -290,24 +294,26 @@ template <typename Key,
 #ifndef NDEBUG
             std::cerr << "No such key in hashmap!\n";
 #endif
-            return false;
+            return 0;
         }
 
-        mapped_type&  operator[](key_type key){
-            iterator it = find(key);
+        mapped_type&  operator[](key_type& key){
+            iterator it = find(std::move(key));
             if(it == this->end()){
 #ifndef NDEBUG
-                std::cout << "No such key, invoking add()...\n";
+                std::cout << "No such key, invoking insert()...\n";
 #endif
-                this->add(key,mapped_type());
-                it = iterator(this->find(key));
+                this->insert(std::move(key),mapped_type());
+                it = iterator(this->find(std::move(key)));
             }
             mapped_type& lref = (*it).second;
             return lref;
         }
 
 
-        iterator find(key_type key) {
+
+
+        iterator find(key_type&& key) {
            size_t index = hash_function(key);
            if (hash_exists(index)){
                auto it = buckets[index].begin();
