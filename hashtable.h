@@ -3,10 +3,8 @@
 #include <vector>
 #include <utility>
 #include <forward_list>
-#include <string>
-#include <iostream>
+#include <functional>
 
-#define NDEBUG
 
 
 /**
@@ -14,53 +12,35 @@
  * @brief STL-compatible HashMap
  */
 template <typename Key,
-    typename Value>
+          typename Value,
+          typename Hash = std::hash<Key>,
+          typename KeyEqual = Key,
+          typename Allocator = std::allocator<std::vector< std::forward_list< std::pair<const Key, Value> > >>
+          >
     class HashTable final {
 
         friend class iterator;
         using container_type = std::vector< std::forward_list< std::pair<const Key, Value> > >;
         using bucket_type = std::forward_list<std::pair<const Key, Value>>;
+        using key_value_pair = std::pair<const Key, Value>;
         using mapped_type = Value;
         using key_type = Key;
         using const_key_type = const Key;
         static constexpr size_t default_size = 100;
         size_t current_size = default_size;
         size_t number_of_elements = 0;
-        static constexpr double overload_factor = 0.75;
-        double load_factor = 0;
-        size_t first_pos = 0;
-        size_t last_pos = 0;
-        size_t buckets_initiliazed  = 0;
+        size_t first_pos;
+        size_t last_pos;
 
-        container_type buckets;
-
-        constexpr size_t length_of_forward_list(const bucket_type& list){
-            size_t num = 0;
-            for(auto elem:list){
-                num++;
-            }
-            return num;
-        }
-
-        void resize();
-
-        void rehash();
+        container_type buckets = container_type(default_size);
 
         constexpr size_t hash_function(key_type key){
-            return std::hash<key_type>()(key)%current_size;
+            return (Hash{}(key))%current_size;
         }
 
         bool hash_exists(size_t hash) {
-            auto size = buckets.size();
-            if(size==0){
-                return false;
-            }
-            if(size - 1 >= hash){
-                return !(buckets[hash].empty());
-            }
-            return false;
+            return !buckets[hash].empty();
         }
-
 
         constexpr size_t find_pre_last_bucket(){
             for(size_t index = last_pos;index>0;index--){
@@ -81,16 +61,20 @@ template <typename Key,
         }
 
         void last_first(size_t index, bool deleting = false){
-            if (this->number_of_elements==0){
-                this->first_pos = index;
-                this->last_pos = index;
+            if (number_of_elements==0){
+                first_pos = index;
+                last_pos = index;
                 return;
             }
             if(index<first_pos){
                 this->first_pos = index;
             }
             else if(index>last_pos){
+
                 this->last_pos = index;
+            }
+            if(!deleting){
+                return;
             }
 
             if(deleting && (index==last_pos)){
@@ -103,7 +87,6 @@ template <typename Key,
 
         }
 
-
     public:
 
         class iterator {
@@ -113,51 +96,60 @@ template <typename Key,
             using KeyVal_ptr = std::pair<const_key_type, mapped_type>*;
             using key_val_pair = std::pair<const_key_type,mapped_type>;
 
-
-
-        public:
             base_container_type_ref parent;
             KeyVal_ptr ptr;
             size_t pos;
-            size_t pos_in_bucket;
+
+            iterator()=default;
+
+        public:
+
             iterator(base_container_type_ptr _parent, bool points_to_the_end = false)
                 :
                   parent(*_parent),
-                  pos(points_to_the_end
-                      ? parent.last_pos
-                      : parent.first_pos){
-                if(!points_to_the_end){
-                    auto it = parent.buckets[pos].begin();
+                  pos(0){
+                if(points_to_the_end){
+                    pos = parent.last_pos;
+                    auto it = parent.buckets[pos].end();
                     ptr = &(*it);
-#ifndef NDEBUG
-                    std::cout << "Iterator to BEGIN created\n";
-#endif
+
                 }
                 else{
-
-                    auto it = parent.buckets[pos].end();
+                    pos = parent.first_pos;
+                    auto it = parent.buckets[pos].begin();
                     ptr = &*it;
-#ifndef NDEBUG
-                    std::cout << "Iterator to the END created\n";
-#endif
                 }
             }
 
-            iterator(base_container_type_ptr _parent,KeyVal_ptr _ptr, size_t hash, size_t _pos_in_bucket):
+            iterator(base_container_type_ptr _parent,KeyVal_ptr _ptr, size_t hash, size_t _pos_in_bucket=0):
                   parent(*_parent),
                   pos(hash),
-                  pos_in_bucket(_pos_in_bucket),
-                  ptr(_ptr){}
+                  ptr(_ptr){
+#ifndef NDEBUG
+                //std::cout << "Iterator position-based constructor invoked\n";
+#endif
+            }
 
-            iterator(iterator& it, bool points_to_the_end = false):
+            iterator(const iterator& it, bool points_to_the_end = false):
                   parent(it.parent),
                   pos(points_to_the_end
                       ? parent.last_pos
                       : it.pos),
-                  ptr(it.ptr){}
+                  ptr(it.ptr){
+#ifndef NDEBUG
+                //std::cout << "Iterator copy constructor invoked\n";
+#endif
+            }
 
 
-            iterator& operator=(iterator&& right){
+            iterator(iterator&& rv_iter):parent(rv_iter.parent),pos(rv_iter.pos),ptr(rv_iter.ptr){
+#ifndef NDEBUG
+                //std::cout << "Iterator move constructor invoked\n";
+#endif
+            }
+
+            template<typename iter_type>
+            iterator& operator=(iter_type&& right){
                 this->ptr = right.ptr;
                 this->pos = right.pos;
                 this->pos_in_bucket = right.pos_in_bucket;
@@ -179,18 +171,9 @@ template <typename Key,
                 return temp;
             };
 
-            auto constexpr operator--(){
-                this->prev();
-                return *this;
-            };
-
-
-
-
             constexpr bool operator==(iterator&& second){
                 return ptr == second.ptr;
             }
-
 
             constexpr bool operator!=(iterator second){
                 return ptr != second.ptr;
@@ -199,8 +182,6 @@ template <typename Key,
             auto constexpr operator->(){
                 return this;
             }
-
-
 
             void constexpr next(){
                 for(size_t i = pos;i<=parent.last_pos;i++){
@@ -235,42 +216,77 @@ template <typename Key,
             pos = parent.last_pos;
             ptr = &(*(parent.buckets[parent.last_pos].end()));
             }
-
-
-            void constexpr prev();
             };
 
 
-        HashTable():first_pos(0),last_pos(0) {
-            buckets.push_back(std::forward_list<std::pair<const_key_type,mapped_type>>());
-            // The first list must be initialized due to the functionals.
-
-#ifndef NDEBUG
-            std::cout << "Invoked default hashmap constructor\n";
-#endif
+        HashTable(size_t n = default_size) {
+            buckets.resize(n);
         }
 
+        HashTable(const HashTable<key_type,mapped_type>& right)
+            :first_pos(right.first_pos),
+              last_pos(right.last_pos),
+              buckets(right.buckets),
+              number_of_elements(right.number_of_elements){};
 
-
+        HashTable(HashTable<key_type,mapped_type>&& right)
+            :first_pos(right.first_pos),
+              last_pos(right.last_pos),
+              buckets(right.buckets),
+              number_of_elements(right.number_of_elements){};
 
         template<typename T_k, typename T_v>
-        void insert(T_k&& key, T_v&& value) {
+        bool insert(T_k&& key, T_v&& value) {
             size_t hash = hash_function(key);
-            for (size_t _ = buckets.size();_<= hash;_++){
-                buckets.push_back(std::forward_list<std::pair<const T_k,T_v>>());
+            if(hash_exists(hash)){
+                for(auto pair:buckets[hash]){
+                    if (pair.first == key){
+                        return false;
+                    }
+                    else{
+                        buckets[hash].push_front(std::pair<const Key, Value>(key,value));
+                        last_first(hash);
+                        number_of_elements++;
+                        return true;
+                    }
+                }
             }
-            buckets[hash].insert_after(buckets[hash].before_begin(),std::pair<const T_k,T_v>(key,value));
-            last_first(hash);
-            number_of_elements++;
+            else{
+                buckets[hash].push_front(std::pair<const Key, Value>(key,value));
 
-            this->load_factor = double(this->number_of_elements) / double(this->current_size);
+                last_first(hash);
+                number_of_elements++;
+                return true;
+            }
+            return false;
         }
 
 
         template <typename T_k, typename T_v>
-        void assign(T_k&& key, T_v&& value);
+        std::pair<iterator,bool> insert_or_assign(T_k&& key, T_v&& value){
+            bool was_inserted;
+            size_t hash = hash_function(key);
+            if(!insert(key,value)){
+                was_inserted = false;
+                auto it = buckets[hash].begin();
+                while(  it != buckets[hash].end() ){
+                    if((*it).first  == key){
+                        (*it).second = value;
+                        key_value_pair* now_pair = &(*it);
+                        iterator result_iter(this,now_pair,hash);
+                        std::pair<iterator,bool> result_pair = std::make_pair(result_iter,was_inserted);
+                        return result_pair;
 
-        size_t remove(key_type&& key){
+                    }
+                    it++;
+                }
+            }
+            was_inserted = true;
+            return std::make_pair(find(std::move(key)),was_inserted);
+        }
+
+        template<typename T_k>
+        size_t remove(T_k&& key){
             size_t index = hash_function(key);
             if(hash_exists(index)){
                 auto before_it = buckets[index].before_begin();
@@ -282,38 +298,24 @@ template <typename Key,
                         if(buckets[index].empty()){
                             last_first(index,true);
                         }
-#ifndef NDEBUG
-                        std::cout << "\nPair with key=" << key << " was deleted\n";
-#endif
                         return 1;
                     }
                     before_it++;
                     it++;
                 }
             }
-#ifndef NDEBUG
-            std::cerr << "No such key in hashmap!\n";
-#endif
             return 0;
         }
 
         mapped_type&  operator[](key_type& key){
-            iterator it = find(std::move(key));
-            if(it == this->end()){
-#ifndef NDEBUG
-                std::cout << "No such key, invoking insert()...\n";
-#endif
-                this->insert(std::move(key),mapped_type());
-                it = iterator(this->find(std::move(key)));
-            }
+            iterator it = insert_or_assign(std::move(key),mapped_type()).first;
             mapped_type& lref = (*it).second;
             return lref;
         }
 
 
-
-
-        iterator find(key_type&& key) {
+        template<typename T_k>
+        iterator find(T_k&& key) {
            size_t index = hash_function(key);
            if (hash_exists(index)){
                auto it = buckets[index].begin();
@@ -327,22 +329,34 @@ template <typename Key,
            return this->end();
         }
 
-
-
         iterator begin(){
-            return iterator(this);
+            return iterator(this,false);
         }
+
         iterator end(){
             return iterator(this,true);
         }
 
-
-        const size_t number(){
+        const size_t size(){
             return  size_t(number_of_elements);
         }
 
-        const container_type const_buckets(){
-            return buckets;
+        void rehash(size_t new_number_of_nodes=0){
+            if(!new_number_of_nodes){
+                new_number_of_nodes = this->buckets.size() * 2;
+            }
+            const container_type new_buckets = buckets;
+            buckets.clear();
+            buckets.resize(new_number_of_nodes);
+            current_size = new_number_of_nodes;
+            number_of_elements = 0;
+            for(auto list:new_buckets){
+                if(!list.empty()){
+                    for(auto pair:list){
+                        this->insert(pair.first,pair.second);
+                    }
+                }
+            }
         }
 
     };
