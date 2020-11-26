@@ -6,4 +6,6 @@ Here is header with template class Hashtable, which has very-very similar behavi
 
 Realized methods: insert(), insert_or_assign(), operator [] acces to the element, remove(), find(), rehash().
 
+This Hashmap doesn't rehash itself.
+
 Forward iterator
