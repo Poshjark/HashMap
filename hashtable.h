@@ -1,25 +1,23 @@
-#pragma once
-
 #include <vector>
 #include <utility>
 #include <forward_list>
 #include <functional>
-
-
+#include <string>
+#include <iostream>
+#include <unordered_map>
 
 /**
  * @class HashTable
  * @brief STL-compatible HashMap
  */
-template <typename Key,
-          typename Value,
-          typename Hash = std::hash<Key>,
-          typename KeyEqual = Key,
-          typename Allocator = std::allocator<std::vector< std::forward_list< std::pair<const Key, Value> > >>
-          >
-    class HashTable final {
 
+
+
+template <typename Key,
+          typename Value>
+    class HashTable final {
         friend class iterator;
+        using Hash = std::hash<Key>;
         using container_type = std::vector< std::forward_list< std::pair<const Key, Value> > >;
         using bucket_type = std::forward_list<std::pair<const Key, Value>>;
         using key_value_pair = std::pair<const Key, Value>;
@@ -34,15 +32,15 @@ template <typename Key,
 
         container_type buckets = container_type(default_size);
 
-        constexpr size_t hash_function(key_type key){
+        constexpr size_t hash_function(key_type key) const{
             return (Hash{}(key))%current_size;
         }
 
-        bool hash_exists(size_t hash) {
+        bool hash_exists(size_t hash) const{
             return !buckets[hash].empty();
         }
 
-        constexpr size_t find_pre_last_bucket(){
+        constexpr size_t find_pre_last_bucket() const{
             for(size_t index = last_pos;index>0;index--){
                 if(!buckets[index].empty()){
                     return index;
@@ -51,7 +49,7 @@ template <typename Key,
             return 0;
         }
 
-        constexpr size_t find_second_bucket(){
+        constexpr size_t find_second_bucket() const{
             for(size_t index =first_pos+1;index <= last_pos;index++){
                 if(!buckets[index].empty()){
                     return index;
@@ -60,7 +58,7 @@ template <typename Key,
             return last_pos;
         }
 
-        void last_first(size_t index, bool deleting = false){
+        void last_first(size_t index, bool deleting = false) noexcept{
             if (number_of_elements==0){
                 first_pos = index;
                 last_pos = index;
@@ -86,6 +84,33 @@ template <typename Key,
             }
 
         }
+
+          template<typename T_k, typename T_v>
+        bool insert_pair(T_k&& key, T_v&& value) {
+            size_t hash = hash_function(key);
+            if(hash_exists(hash)){
+                for(auto pair:buckets[hash]){
+                    if (pair.first == key){
+                        return false;
+                    }
+                    else{
+                        buckets[hash].push_front(std::pair<const Key, Value>(key,value));
+                        last_first(hash);
+                        number_of_elements++;
+                        return true;
+                    }
+                }
+            }
+            else{
+                buckets[hash].push_front(std::pair<const Key, Value>(key,value));
+
+                last_first(hash);
+                number_of_elements++;
+                return true;
+            }
+            return false;
+        }
+
 
     public:
 
@@ -124,29 +149,17 @@ template <typename Key,
             iterator(base_container_type_ptr _parent,KeyVal_ptr _ptr, size_t hash, size_t _pos_in_bucket=0):
                   parent(*_parent),
                   pos(hash),
-                  ptr(_ptr){
-#ifndef NDEBUG
-                //std::cout << "Iterator position-based constructor invoked\n";
-#endif
-            }
+                  ptr(_ptr){}
 
             iterator(const iterator& it, bool points_to_the_end = false):
                   parent(it.parent),
                   pos(points_to_the_end
                       ? parent.last_pos
                       : it.pos),
-                  ptr(it.ptr){
-#ifndef NDEBUG
-                //std::cout << "Iterator copy constructor invoked\n";
-#endif
-            }
+                  ptr(it.ptr){}
 
 
-            iterator(iterator&& rv_iter):parent(rv_iter.parent),pos(rv_iter.pos),ptr(rv_iter.ptr){
-#ifndef NDEBUG
-                //std::cout << "Iterator move constructor invoked\n";
-#endif
-            }
+            iterator(iterator&& rv_iter):parent(rv_iter.parent),pos(rv_iter.pos),ptr(rv_iter.ptr){}
 
             template<typename iter_type>
             iterator& operator=(iter_type&& right){
@@ -156,13 +169,13 @@ template <typename Key,
                 return *this;
             }
 
-            std::pair<const_key_type,mapped_type>& operator*(){
+            std::pair<const_key_type,mapped_type>& operator*() const{
                 return *ptr;
             }
 
-            auto constexpr operator++(){
+            iterator constexpr operator++(){
                 this->next();
-                return this;
+                return *this;
             };
 
             iterator  operator++(int){
@@ -171,16 +184,17 @@ template <typename Key,
                 return temp;
             };
 
-            constexpr bool operator==(iterator&& second){
+            constexpr bool operator==(iterator&& second) const noexcept{
                 return ptr == second.ptr;
             }
 
-            constexpr bool operator!=(iterator second){
+            constexpr bool operator!=(iterator second)const noexcept{
                 return ptr != second.ptr;
             }
 
-            auto constexpr operator->(){
-                return this;
+
+            KeyVal_ptr operator->() const{
+                return &(this->operator*());;
             }
 
             void constexpr next(){
@@ -213,10 +227,10 @@ template <typename Key,
                         }
                     }
                 }
-            pos = parent.last_pos;
-            ptr = &(*(parent.buckets[parent.last_pos].end()));
+                pos = parent.last_pos;
+                ptr = &(*(parent.buckets[parent.last_pos].end()));
             }
-            };
+        };
 
 
         HashTable(size_t n = default_size) {
@@ -235,38 +249,13 @@ template <typename Key,
               buckets(right.buckets),
               number_of_elements(right.number_of_elements){};
 
-        template<typename T_k, typename T_v>
-        bool insert(T_k&& key, T_v&& value) {
-            size_t hash = hash_function(key);
-            if(hash_exists(hash)){
-                for(auto pair:buckets[hash]){
-                    if (pair.first == key){
-                        return false;
-                    }
-                    else{
-                        buckets[hash].push_front(std::pair<const Key, Value>(key,value));
-                        last_first(hash);
-                        number_of_elements++;
-                        return true;
-                    }
-                }
-            }
-            else{
-                buckets[hash].push_front(std::pair<const Key, Value>(key,value));
-
-                last_first(hash);
-                number_of_elements++;
-                return true;
-            }
-            return false;
-        }
 
 
         template <typename T_k, typename T_v>
         std::pair<iterator,bool> insert_or_assign(T_k&& key, T_v&& value){
             bool was_inserted;
             size_t hash = hash_function(key);
-            if(!insert(key,value)){
+            if(!insert_pair(key,value)){
                 was_inserted = false;
                 auto it = buckets[hash].begin();
                 while(  it != buckets[hash].end() ){
@@ -286,7 +275,7 @@ template <typename Key,
         }
 
         template<typename T_k>
-        size_t remove(T_k&& key){
+        size_t erase(T_k&& key){
             size_t index = hash_function(key);
             if(hash_exists(index)){
                 auto before_it = buckets[index].before_begin();
@@ -306,8 +295,8 @@ template <typename Key,
             }
             return 0;
         }
-
-        mapped_type&  operator[](key_type& key){
+        template<typename T_k>
+        mapped_type&  operator[](T_k&& key){
             iterator it = insert_or_assign(std::move(key),mapped_type()).first;
             mapped_type& lref = (*it).second;
             return lref;
@@ -329,17 +318,19 @@ template <typename Key,
            return this->end();
         }
 
-        iterator begin(){
+        iterator begin() {
             return iterator(this,false);
         }
 
-        iterator end(){
+        iterator end() {
             return iterator(this,true);
         }
 
-        const size_t size(){
-            return  size_t(number_of_elements);
+        const size_t size() noexcept{
+            return  number_of_elements;
         }
+
+
 
         void rehash(size_t new_number_of_nodes=0){
             if(!new_number_of_nodes){
@@ -353,10 +344,13 @@ template <typename Key,
             for(auto list:new_buckets){
                 if(!list.empty()){
                     for(auto pair:list){
-                        this->insert(pair.first,pair.second);
+                        this->insert_pair(pair.first,pair.second);
                     }
                 }
             }
         }
 
     };
+
+
+

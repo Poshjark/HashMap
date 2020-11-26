@@ -1,41 +1,31 @@
 #include "hashtable.h"
 #include <iostream>
+#include <string>
+
+
 
 int main() {
-    HashTable<int,int> a;
-
-    for(int i = 0;i<10;i++){
-        a[i] = i*i;
+    HashTable<std::string,int> a;
+    a.insert_or_assign("TWO",2);
+    a["ONE"] = 1;
+    a["FIVE"] = 5;
+    const auto it = a.find("THREE");
+    if(it != a.end()){
+        std:: cout << "Key = " << it->first << " Value = " << (*it).second << "\n";
     }
-
-    a.insert(100,10);
-    auto it_ = a.insert_or_assign(100,2).first;
-    std::cout << (*it_).first << " " << (*it_).second << "\n";
-
-    std::cout << "\nIterating with while()\n";
-    auto it = a.begin();
-    while(it != a.end()){
-        auto elem = *it;
-        std::cout << "Key = " << elem.first << "  Value = " << elem.second << "\n";
-        it++;
+    else{
+        std::cerr << "No such key!\n";
     }
-
-    std::cout << "\nIterating with range based for\n";
-    for(auto elem:a){
-        std::cout << "Key = " << elem.first << "  Value = " << elem.second << "\n";
+    a["zero"];
+    auto iter = a.begin();
+    while(iter!=a.end()){
+        std:: cout << "Key = " << iter->first << " Value = " << (*iter).second << "\n";
+        iter++;
     }
-
-    std:: cout << "\nAfter rehashing \n";
-
-    a.rehash(30);
-    for(auto elem:a){
-        std::cout << "Key = " << elem.first << "  Value = " << elem.second << "\n";
+    std::cout << "\n";
+    a.insert_or_assign("TWO", 100);
+    for (auto pair:a){
+        std:: cout << "Key = " << pair.first << " Value = " << pair.second << "\n";
     }
-    for(auto i = 0;i<2;i++){
-        if (a.remove(1)){
-            std::cout << "\nPair with key 1 deleted\n";
-        }
-    }
-
     return 0;
 }
